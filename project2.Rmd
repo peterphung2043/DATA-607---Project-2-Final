@@ -1,0 +1,373 @@
+---
+title: "Project 2"
+author: "Peter Phung, Coffy Andrews, Krutika Patel"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(Hmisc)
+```
+# **Project 2 Team Breakdown**
+**Peter Phung - Jiho Kim's Indian Stock Market Data (Section 1)**
+
+**Coffy Andrews - So Much Candy Data (Section 2)**
+
+**Chinedu Onyeka - Eric Lehmphul's Student Testing Dataset (Section 2)**
+
+***
+
+# Jiho Kim's Indian Stock Market Data
+
+### Introduction
+One of the datasets that will be tidy, transformed, and analyzed in this report is a dataset that contains the information for well performing Indian stocks in the NSE. This dataset was pulled from [kaggle](https://www.kaggle.com/souravroy1/stock-market-data). There are 63 variables in this dataset. Unfortunately, the author of the dataset did not provide an ancillary document providing a description of what each variable means.  This fact also means that the actual currency for the prices is unknown. Since the data is for the Indian stock market, the currency is assumed to be in Indian Rupees. For this dataset, an analysis detailed in this report was done to address the following:
+
+1. Finding the mean trading high and low prices for each sector.
+2. The distribution of those means for both high and low prices.
+
+
+### Importing of the Data
+The .csv containing the data was stored onto a Github repository which was then imported into our workspace with the following code.
+
+```{r importing of the data}
+
+url <- 'https://raw.githubusercontent.com/peterphung2043/DATA-607---Project-2/main/Stock%20Market%20data%20.csv'
+
+stock_market_data <- read.csv(url(url), stringsAsFactors = FALSE, na.strings = "#N/A")
+knitr::kable(stock_market_data[1:5, 1:5])
+```
+The output above only shows the first five variables and the first five observations. The rest of the data can be viewed on the kaggle hyperlink in the Introduction.
+
+### Tidying and Transforming of the Data
+The columns that were analyzed in this dataset were the `Sector`, `High.Price`, and `Low.Price`.
+
+A check was done to see if the number of missing values for the high prices was the same as the number of missing values for the low prices. This is to see if any of the non-missing high prices had any corresponding missing low prices for each observation and vice versa.
+
+```{r check missing values}
+
+stock_market_data %>%
+  summarise(missing_high_prices = sum(is.na(High.Price)),
+            missing_low_prices = sum(is.na(Low.Price)))
+
+```
+The output above shows that the `High.Price` column and the `Low.Price` column have the same amount of missing values. 
+
+The code block below selects the 3 variables that we need for the analysis. then discards observations containing missing values in the dataset. The resulting dataframe is then stored as `parsed_stock_market_data`. Only the first 5 observations are shown below.
+
+```{r delete rows containing missing values}
+
+parsed_stock_market_data <- stock_market_data %>%
+  select(Sector, High.Price, Low.Price) %>%
+  drop_na()
+knitr::kable(parsed_stock_market_data[1:5,])
+
+```
+
+The code block below does the following to the `parsed_stock_market_data` dataframe.
+
+1. Grouping by the `Sector` column. Since the analysis calls for determining the mean high and low price by sector.
+
+2. Using a `mutate` operation to assign a row number to each sector in each group. For example, for the first observation, assume that `sector = "IT"`. For the first observation, `row = 1`. For the 2nd observation, `sector = "DIVERSIFIED"`, so `row = 1` for the 2nd observation. For the 3rd observation `sector = "IT"`, so `row = 2` for the 3rd observation. Notice that the sectors for the first and third observations were the same, so when assigning a row number, the row number increments if subsequent observations contain the same sector.
+
+3. `pivot_wider` makes it so that all of the `High.Price`s corresponding to a unique `Sector` gets put into a column. Similarily, all the `Low.Price`s corresponding to a unique `Sector` gets put into a column.
+
+4. The `row` column that was generated from step 2 was deleted.
+
+```{r pivoting wider}
+parsed_stock_market_data <- parsed_stock_market_data %>%
+  group_by(Sector) %>%
+  mutate(row = row_number()) %>%
+  pivot_wider(names_from = Sector, values_from = c(High.Price, Low.Price)) %>%
+  select(-row)
+
+knitr::kable((parsed_stock_market_data %>%
+               select(High.Price_DIVERSIFIED, Low.Price_DIVERSIFIED,
+                      High.Price_IT, Low.Price_IT))[1:5,])
+```
+
+The output above shows just the first five values for two of the sectors in `parsed_stock_market_data`.
+
+The data was then stored in a nested dataframe. In this nested dataframe, the `High.Price` columns and the `Low.Price` columns in the parsed stock market data were grouped together separately then moved into list-columns. The resulting nested dataframe is stored as `nested_stock_market_data`.
+
+```{r nesting the pivoted dataframe}
+
+nested_stock_market_data <- parsed_stock_market_data %>%
+  nest(high_price = starts_with("High.Price"), low_price = starts_with("Low.Price"))
+
+```
+The `high_price` column in `nested_stock_market_data` contains all of the `High.Price` values arranged by `Sector`. Similarly, the `low_price` column contains all of the `Low.Price` values arranged by `Sector`. The output for `nested_stock_market_data` is shown below, each list column has 36 variables, which means that there are 36 sectors with multiple high prices and 36 sectors and low prices. 
+
+On RStudio, clicking on an element on each of the list-columns in `nested_stock_market_data` will output the data with respect to the list-column. The outputs for each list-column are shown in the subsequent dataframe.
+
+```{r, echo = FALSE}
+
+nest_df_visual <- data.frame(
+  high_price = c('36 variables'),
+  low_price = c('36 variables')
+)
+
+knitr::kable(nest_df_visual)
+
+```
+
+We can index the list-columns in  `nested_stock_market_data` in order to bring up all of the `High.Price` values for each of the `Sector`s and similarly for the `Low.Price``Sector`s.
+
+```{r unnesting dataframes}
+
+knitr::kable((nested_stock_market_data$high_price[[1]] %>%
+                select(High.Price_DIVERSIFIED, High.Price_IT))[1:5,])
+
+knitr::kable((nested_stock_market_data$low_price[[1]] %>%
+                select(Low.Price_DIVERSIFIED, Low.Price_IT))[1:5,])
+```
+The output for the code block above shows the high and low prices for just the `DIVERSIFIED` and `IT` sectors in `nested_stock_market_data`. There are 36 sectors in total so only two are shown.
+
+### Displaying the Means of the High and Low Prices for Each Sector
+The following block of code computes the means for each of the sectors for Both high and low prices from the `nested_stock_market_data` dataframe. The high price and low price means for each sector are stored in the `trading_means` dataframe.
+```{r means for sectors}
+
+trading_means <- data.frame(
+  high_price_means = colMeans(nested_stock_market_data$high_price[[1]], na.rm = TRUE),
+  low_price_means = colMeans(nested_stock_market_data$low_price[[1]], na.rm = TRUE)
+)
+rownames(trading_means) <- str_extract(names(nested_stock_market_data$high_price[[1]]), '(?<=_).+')
+
+knitr::kable(trading_means)
+
+```
+
+
+### The Distribution of the Means for the High and Low prices
+```{r means high, message = FALSE, fig.cap = "*Fig. 1: High price means histogram.*"}
+ggplot(data = trading_means, aes(x = high_price_means)) +
+  geom_histogram() + xlab("High Price Means (Indian Rupees)") + ylab("Count")
+```
+
+```{r means low, message = FALSE, fig.cap = "*Fig. 2: Low price means histogram.*"}
+ggplot(data = trading_means, aes(x = low_price_means)) +
+  geom_histogram() + xlab("Low Price Means (Indian Rupees)") + ylab("Count")
+```
+
+Figure 1 and Figure 2 show that there is a huge outlier for both the high prices and low prices. 
+```{r show additional stats}
+Hmisc::describe(trading_means)
+```
+
+The `Hmisc` library has a `describe` function which shows the means, the 5th, 10th, 25th, 50th, 75th, 90th, 95th percentiles, the 5 lowest values, and 5 highest values for each variable for a given dataframe. The output above reveals that the highest value for both the `high_price_means` and `low_price_means` are a order of magnitude larger than the 2nd highest, which is why there a huge outlier for both graphs.
+
+```{r show stats high and low prices}
+
+trading_means %>%
+  filter(high_price_means > 10000 | low_price_means > 10000)
+
+```
+The output for the code block above shows that the `AUTO-TYRES AND TUBES` Sector has the highest high and low price means. In fact, this is the only sector with a high or low price mean of over 10,000. This is a significant outlier. Therefore, it was omitted in the following two graphs.
+
+```{r means high filtered, message = FALSE, fig.cap = "*Fig. 3: High price means histogram. Mean high prices above 10,000 Indian rupees were filtered out of the data.*"}
+ggplot(data = trading_means %>% filter(high_price_means < 10000), aes(x = high_price_means)) +
+  geom_histogram() + xlab("High Price Means (Indian Rupees)") + ylab("Count")
+```
+
+```{r means low filtered, message = FALSE, fig.cap = "*Fig. 4: Low price means histogram. Mean low prices above 10,000 Indian rupees were filtered out of the data.*"}
+ggplot(data = trading_means %>% filter(low_price_means < 10000), aes(x = low_price_means)) +
+  geom_histogram() + xlab("Low Price Means (Indian Rupees)") + ylab("Count")
+```
+
+After removing the huge outlier from both the high price and low price means, it is shown that the distribution for both graphs looks to be unimodal and right skewed. The histograms for both the high and low trade price means imply that trade prices in the Indian stock market typically tend to stay below 1000 Indian Rupees a share.
+
+### Conclusions
+By analyzing the Indian stock market data from Kaggle, it has been shown that this data is unimodal and right skewed. It would have been interesting to see the distribution of the data for those high and low prices that were not missing from the original dataset, since there were 599 missing stock prices from the original data. A future analysis could involve finding an association between the high price and low price and other variables in the dataset.
+
+
+***
+
+# So Much Candy Data
+
+```{r, echo = FALSE, message = FALSE}
+# load library
+library(stringr)
+library(readr)
+library(tidyverse)
+library (tidyr)
+library(jpeg)
+library(gridExtra)
+```
+
+This analysis was sourced from [The Science Creative Quarterly](https://www.scq.ubc.ca/so-much-candy-data-seriously/) written by "David Ng and published at [BoingBoing](https://boingboing.net/2017/10/30/the-2017-halloween-candy-hiera.html). Halloween is right around the corner and let's say everyone is stocking up on sweets. Why would individuals continue to buy bulks of candy during a pandemic? Simple! We all love candy ... Kit Kat, Hershey, Snickers, Twix, and a handful of others. The researchers, Ng & Cohen, compiled years of hierarchy of candy preference for years as a geology joke.  
+
+The "Candy Hierarchy Data 2017" data was complied on [survey responses](https://www.scq.ubc.ca/wp-content/uploads/2017/10/candyhierarchysurvey2017.pdf) with ratings on how you feel when you receive this item in your Halloween haul.
+
+### Reading in Data
+```{r candyhierarch2017}
+# load the data from GitHub
+data <- read.csv(url("https://raw.githubusercontent.com/peterphung2043/DATA-607---Project-2-Final/main/candyhierarchy2017.csv"), header = FALSE, stringsAsFactors = FALSE)
+# show the first parts of the dataframe
+data <- data %>% mutate_all(na_if,"") # change the blank cells to "NA"
+head(data[1:4,1:5, drop = FALSE]) # show the first four rows of the data
+```
+
+
+### Clean candy names
+```{r results='hide', include=FALSE}
+# extract and clean dataset first row - removed "Q1.. Q2.. Qx.." 
+data_name <- str_remove_all(data[1, ], ("^\\w\\d{1,}[:punct:]\\s"))
+head(data_name)
+```
+
+```{r include=FALSE}
+# clean "data" string - removed "Q5 |... Qx |..." and renamed as "data.3"
+data_name <- str_remove_all(data_name, ("^\\w\\d\\s[:symbol:]\\s"))
+head(data_name)
+```
+
+
+```{r include=FALSE}
+# convert string to a data frame using matrix to match "data.3.dataset".
+df <- matrix(data = data_name, nrow = 1, ncol = 120)
+df[1:5, drop = FALSE]
+```
+
+
+```{r, results='hide'}
+newDf <- rbind(df, data)   # combine rows from two dataframes into new 
+names(newDf) <- df[1, ] # copy first row to the header
+newDf <- newDf[-1:-2,]     # delete first and second rows
+```
+
+```{r results='hide'}
+newDf[!apply(newDf == "", 1, all), ]
+newDf[rowSums(is.na(newDf)) !=ncol(newDf), ]
+```
+
+
+### Analysis - Type of Feelings when Candy is Recieved
+
+The data has 2459 individuals completed the survey. The survey informed individuals to they can skipped a option/question, leave the question blank, or indicate "they don't know the candy".
+
+Feeling Values:
+
+JOY - Does it make you happy?
+
+DESPAIR - Is it something that you automatically place in the junk pile?
+
+MEH - Indifference
+
+BLANK - No idea what the item is.
+
+
+A interest to see the preference for "Plot1: Butterfinger and Plot2: Snickers" candy. In the bar plot the distribution on feelings, "JOY, DESPAIR, MEH, BLANK". 
+
+```{r}
+# First, clean up age
+newDf$AGE <- as.numeric(newDf$AGE)
+newDf$AGE[is.na(newDf$AGE)] <- 0
+
+age_candy = newDf %>% select(AGE, Butterfinger, Snickers, `Heath Bar`)
+```
+
+```{r}
+library(ggplot2)
+library(gcookbook)
+# First plot
+ggplot(age_candy, aes(x = Butterfinger)) +
+geom_histogram(position = "identity", stat = "count")
+```
+
+```{r}
+# Second plot
+ggplot(age_candy, aes(x = Snickers)) +
+  geom_histogram(position = "identity", stat = "count")
+```
+
+***
+
+# Student Testing
+
+### **Objective:** To determine if study time impacts test scores from a sample of 11 students 
+
+### **Data Source:** [Eric Lehmphul](https://raw.githubusercontent.com/SaneSky109/DATA607/main/Project_2/Data/DATA607_discussion5.csv)
+
+```{r message=FALSE}
+library(tidyverse)
+```
+
+Read the file
+```{r read-file, message=FALSE}
+url <- "https://raw.githubusercontent.com/peterphung2043/DATA-607---Project-2-Final/main/test_scores"
+test_scores <- read_csv(url)
+```
+```{r}
+test_scores
+```
+
+
+Separate the columns
+```{r}
+#Separate the  columns
+test_scores <- test_scores %>% separate(`Test1, TimeStudiedTest1`, 
+                                        into = c("Test1", "TimeStudiedTest1"))
+test_scores <- test_scores %>% separate(`Test2, TimeStudiedTest2`, 
+                                        into = c("Test2", "TimeStudiedTest2"))
+test_scores <- test_scores %>% separate(`Test3, TimeStudiedTest3`, 
+                                        into = c("Test3", "TimeStudiedTest3"))
+#select the columns in order
+test <- test_scores %>% select(Student, Test1, Test2, Test3, 
+                               TimeStudiedTest1, TimeStudiedTest2, TimeStudiedTest3)
+test
+```
+Convert all the columns from Test1 to TimeStudiedTest3 to numeric
+```{r}
+test_student <- test %>% select(Student)
+test_others <- test %>% select(-Student)
+dat_df <- unlist(sapply(test_others, as.numeric)) #convert all the columns except the Student column to numeric
+dat_daf <- as.data.frame(dat_df)
+test_results <- cbind(test_student, dat_daf)
+# Replace NA with 0
+test_results <- test_results %>% replace(is.na(.), 0)
+test_results
+```
+Gather the Tests and the time studied
+```{r}
+test_resultsa <- test_results %>% select(Student:Test3)
+#gather Test1 to Test 3 into Test
+test_resultsa <- test_resultsa %>% gather(key = "Test", value = "Score", Test1:Test3) %>% arrange(Student)
+#gather StudyTimeTest1 to StudyTimeTest 3 into TestType
+test_resultsb <- test_results %>% select(Student, TimeStudiedTest1:TimeStudiedTest3)
+test_resultsb <- test_resultsb %>% gather(key = "TestType", value = "StudyTime",
+                                          TimeStudiedTest1:TimeStudiedTest3) %>% arrange(Student) %>% select(-Student)
+test_results_long <- cbind(test_resultsa, test_resultsb)
+test_results_long <- test_results_long %>% select(-TestType)
+test_results_long
+```
+We now have a long table with four(4) columns: Student, Test, Score and StudyTime.  
+
+Next we find the average test score and average study time for each student.  
+
+```{r}
+test_res <- test_results_long %>% group_by(Student) %>%
+  summarise(Avg_Score = round(mean(Score), 0), Avg_StudyTime = round(mean(StudyTime),0))
+student_test_results <- cbind(test_res, Gender = test_scores$Gender) %>% 
+  select(Student, Gender, Avg_Score, Avg_StudyTime)
+student_test_results
+```
+Plot a scatter plot of the Avg_StudyTime vs Avg_Score
+
+```{r}
+base <- ggplot(data = student_test_results, aes(Avg_StudyTime, Avg_Score)) + geom_point() +
+  geom_smooth(se = FALSE) + ylab("Average Score") + xlab("Average Study Time") + theme_bw() + 
+  labs(title = "Average Test Score vs Average Study Time")
+base
+```
+
+Find correlation
+```{r}
+x <- student_test_results$Avg_StudyTime
+y <- student_test_results$Avg_Score
+cor.test(x, y)
+```
+**Conclusion: ** *From the scatter plot above and from the correlation coefficient of about 0.7 calculated, we can infer that as Average Study Time of students increases, their corresponding Average Test Score increases. Hence, we can say that study time impacts test scores. *
+
